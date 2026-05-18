@@ -136,7 +136,65 @@ vim.keymap.set("n", "<leader>rc", ":e $MYVIMRC<CR>", { desc = "Edit config" })
 vim.keymap.set("n", "<leader>rl", ":so $MYVIMRC<CR>", { desc = "Reload config" })
 
 vim.keymap.set("n", "<leader>o", ":update<CR>:source<CR>")
-vim.keymap.set("n", "<leader>w", ":write<CR>")
+
+local function in_notepad(path)
+	local dir = vim.fn.fnamemodify(path, ":p:h")
+	while dir and dir ~= "" and dir ~= "/" do
+		if vim.fn.fnamemodify(dir, ":t") == "Notepad" then
+			return true
+		end
+		local parent = vim.fn.fnamemodify(dir, ":h")
+		if parent == dir then
+			break
+		end
+		dir = parent
+	end
+	return false
+end
+
+local git_busy = {}
+vim.keymap.set("n", "<leader>w", function()
+	vim.cmd("write")
+	local file = vim.api.nvim_buf_get_name(0)
+	if file == "" or not in_notepad(file) then
+		return
+	end
+	local file_dir = vim.fn.fnamemodify(file, ":p:h")
+	if git_busy[file_dir] then
+		vim.notify("Git push already in progress for " .. file_dir, vim.log.levels.INFO)
+		return
+	end
+	git_busy[file_dir] = true
+	local timestamp = os.date("%Y-%m-%d %H:%M:%S")
+	local msg = "Update " .. vim.fn.fnamemodify(file, ":t") .. " " .. timestamp
+	vim.system(
+		{ "sh", "-c", string.format(
+			"git add %s && git commit -m %s && git push",
+			vim.fn.shellescape(file),
+			vim.fn.shellescape(msg)
+		) },
+		{ cwd = file_dir, text = true },
+		function(out)
+			vim.schedule(function()
+				git_busy[file_dir] = nil
+				if out.code == 0 then
+					vim.notify("Pushed: " .. msg, vim.log.levels.INFO)
+				else
+					vim.notify(
+						string.format(
+							"Git failed (exit %d)\nstdout: %s\nstderr: %s",
+							out.code,
+							out.stdout or "",
+							out.stderr or ""
+						),
+						vim.log.levels.WARN
+					)
+				end
+			end)
+		end
+	)
+end, { desc = "Write (auto git push if under Notepad/)" })
+
 vim.keymap.set("n", "<leader>q", ":quit<CR>")
 
 vim.keymap.set("n", ";", ":")
@@ -224,8 +282,8 @@ vim.keymap.set("n", "<leader>p", function()
 	local input = vim.fn.input("Image directory (empty for default): ", "", "dir")
 	if input == "" then
 		require("img-clip").pasteImage()
-	elseif input == "[blogs]" or input == "[projects]" then
-		local subdir = input == "[blogs]" and "blog" or "projects"
+	elseif input == "[blog]" or input == "[projects]" then
+		local subdir = input == "[blog]" and "blog" or "projects"
 		local found = vim.fn.systemlist({ "find", vim.fn.getcwd(), "-type", "d", "-name", "assets" })
 		if vim.v.shell_error ~= 0 or #found == 0 then
 			vim.notify("No assets/ directory found under cwd", vim.log.levels.ERROR)
