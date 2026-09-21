@@ -304,6 +304,85 @@ vim.keymap.set("n", "<leader>p", function()
 	end
 end, { desc = "Paste image from clipboard" })
 
+-- LaTeX preamble that makes math-only commands (font commands like \mathbf,
+-- Greek letters, common symbols, \frac, ...) also work outside math mode by
+-- wrapping each in \ensuremath. Used by the markdown -> PDF keymap below.
+local function pandoc_math_header()
+	local lines = {}
+	local function add(fmt, c)
+		lines[#lines + 1] = string.format(fmt, c, c, c, c)
+	end
+	-- One-argument font commands: \mathbf{x}, \mathit{x}, ...
+	for _, c in ipairs({
+		"mathbf", "mathit", "mathrm", "mathsf", "mathtt",
+		"mathcal", "mathbb", "mathfrak",
+	}) do
+		add([[\let\old%s\%s\renewcommand{\%s}[1]{\ensuremath{\old%s{#1}}}]], c)
+	end
+	-- Zero-argument symbols: Greek letters, operators, relations, arrows, ...
+	for _, c in ipairs({
+		"alpha", "beta", "gamma", "delta", "epsilon", "varepsilon", "zeta", "eta",
+		"theta", "vartheta", "iota", "kappa", "lambda", "mu", "nu", "xi", "pi",
+		"varpi", "rho", "varrho", "sigma", "varsigma", "tau", "upsilon",
+		"phi", "varphi", "chi", "psi", "omega",
+		"Gamma", "Delta", "Theta", "Lambda", "Xi", "Pi", "Sigma", "Upsilon",
+		"Phi", "Psi", "Omega",
+		"infty", "partial", "nabla", "ell", "hbar", "aleph",
+		"pm", "mp", "times", "div", "cdot",
+		"leq", "geq", "neq", "approx", "equiv", "sim", "cong", "propto",
+		"subset", "supset", "subseteq", "supseteq", "in", "ni",
+		"cup", "cap", "setminus", "emptyset", "forall", "exists",
+		"rightarrow", "leftarrow", "Rightarrow", "Leftarrow", "Leftrightarrow",
+		"to", "mapsto",
+		"sum", "prod", "int", "oint", "bigcup", "bigcap",
+	}) do
+		add([[\let\old%s\%s\renewcommand{\%s}{\ensuremath{\old%s}}]], c)
+	end
+	-- Two-argument commands: \frac{a}{b}, \binom{n}{k}
+	for _, c in ipairs({ "frac", "binom" }) do
+		add([[\let\old%s\%s\renewcommand{\%s}[2]{\ensuremath{\old%s{#1}{#2}}}]], c)
+	end
+	return table.concat(lines, " ")
+end
+
+-- Markdown -> PDF via pandoc (LaTeX engine)
+vim.keymap.set("n", "<leader>mp", function()
+	local file = vim.api.nvim_buf_get_name(0)
+	if file == "" or not file:match("%.md$") then
+		vim.notify("Current buffer is not a markdown file", vim.log.levels.ERROR)
+		return
+	end
+	vim.cmd("update")
+	local downloads = vim.fn.expand("~/Downloads")
+	if vim.fn.isdirectory(downloads) == 0 then
+		vim.fn.mkdir(downloads, "p")
+	end
+	local out = downloads .. "/" .. vim.fn.fnamemodify(file, ":t:r") .. ".pdf"
+	vim.notify("Converting to PDF...", vim.log.levels.INFO)
+	vim.system(
+		{
+			"pandoc", file,
+			"-o", out,
+			"--pdf-engine=xelatex",
+			"-V", "geometry:margin=1in",
+			"-V", "header-includes=" .. pandoc_math_header(),
+		},
+		{ cwd = vim.fn.fnamemodify(file, ":p:h"), text = true },
+		function(res)
+			vim.schedule(function()
+				if res.code == 0 then
+					vim.notify("PDF written: " .. out, vim.log.levels.INFO)
+				else
+					vim.notify(
+						"pandoc failed (exit " .. res.code .. ")\n" .. (res.stderr or ""),
+						vim.log.levels.ERROR
+					)
+				end
+			end)
+		end
+	)
+end, { desc = "Convert markdown to PDF in ~/Downloads" })
+
 -- vim-table-mode
 vim.g.table_mode_corner = "|" -- markdown-compatible tables
 vim.g.table_mode_header_fillchar = "-"
@@ -353,8 +432,8 @@ vim.api.nvim_create_autocmd("LspAttach", {
 	end,
 })
 
-vim.diagnostic.config({
-	virtual_lines = {
-		current_line = true,
-	}
-})
+-- vim.diagnostic.config({
+-- 	virtual_lines = {
+-- 		current_line = true,
+-- 	}
+-- })

@@ -20,6 +20,10 @@
       "rev": "bf17c96a836ea27c0a7a2650ba385a7783ed322e",
       "src": "https://github.com/lukas-reineke/headlines.nvim"
     },
+    "himalaya-vim": {
+      "rev": "978f2b463c4ece28f5e1457029d399638e439704",
+      "src": "https://github.com/pimalaya/himalaya-vim"
+    },
     "image.nvim": {
       "rev": "da2be65c153ba15a14a342b05591652a6df70d58",
       "src": "https://github.com/3rd/image.nvim"
